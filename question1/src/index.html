@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Stock Price Aggregator</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const App = () => {
+      const [token, setToken] = useState(null);
+      const [stocks, setStocks] = useState({});
+      const [selectedStock, setSelectedStock] = useState(null);
+      const [stockData, setStockData] = useState([]);
+      const [currentPage, setCurrentPage] = useState('stock');
+      const [heatmapData, setHeatmapData] = useState([]);
+
+      const API_URL = 'http://20.244.56.144/evaluation-service';
+      const credentials = {
+        email: "2200030474cseh@gmail.com",
+        name: "Lokeshwari Hukumathirao",
+        mobileNo: "7416859518",
+        githubUsername: "HLokeshwari",
+        rollNo: "2200030474",
+        collegeName: "KL University",
+        accessCode: "beTJjJ"
+      };
+
+      useEffect(() => {
+        const fetchToken = async () => {
+          try {
+            const response = await fetch(`${API_URL}/auth`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ...credentials,
+                clientID: "396a1d49-14e7-4149-975b-f4398a239203",
+                clientSecret: "cRmUXPPbkGHzyHGA"
+              })
+            });
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error('Auth request failed:', response.status, errorText);
+              return;
+            }
+            const data = await response.json();
+            if (data.access_token) {
+              console.log('Token received:', data.access_token);
+              setToken(data.access_token);
+            } else {
+              console.error('No access_token in auth response:', data);
+            }
+          } catch (error) {
+            console.error('Error fetching token:', error);
+          }
+        };
+        fetchToken();
+      }, []);
+
+      useEffect(() => {
+        if (!token || typeof token !== 'string' || token.length === 0) {
+          console.log('Invalid or no token, skipping fetchStocks:', token);
+          return;
+        }
+        const fetchStocks = async () => {
+          try {
+            const authHeader = `Bearer ${token}`;
+            console.log('Fetching stocks with config:', {
+              url: `${API_URL}/stocks`,
+              method: 'GET',
+              headers: {
+                Authorization: authHeader,
+                'Content-Type': 'application/json'
+              }
+            });
+            const response = await fetch(`${API_URL}/stocks`, {
+              method: 'GET',
+              headers: {
+                Authorization: authHeader,
+                'Content-Type': 'application/json'
+              }
+            });
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error('Fetch stocks failed:', response.status, errorText);
+              console.log('Response headers:', [...response.headers]);
+              return;
+            }
+            const data = await response.json();
+            console.log('Stocks response:', data);
+            setStocks(data.stocks || {});
+            if (data.stocks && Object.keys(data.stocks).length > 0) {
+              setSelectedStock(Object.keys(data.stocks)[0]);
+            }
+          } catch (error) {
+            console.error('Error fetching stocks:', error);
+          }
+        };
+        fetchStocks();
+      }, [token]);
+
+      useEffect(() => {
+        if (!token || !selectedStock) {
+          console.log('No token or selectedStock, skipping fetchStockData:', { token, selectedStock });
+          return;
+        }
+        const fetchStockData = async () => {
+          try {
+            const authHeader = `Bearer ${token}`;
+            console.log('Fetching stock data with config:', {
+              url: `${API_URL}/stocks/${selectedStock}?minutes=50`,
+              method: 'GET',
+              headers: {
+                Authorization: authHeader,
+                'Content-Type': 'application/json'
+              }
+            });
+            const response = await fetch(`${API_URL}/stocks/${selectedStock}?minutes=50`, {
+              method: 'GET',
+              headers: {
+                Authorization: authHeader,
+                'Content-Type': 'application/json'
+              }
+            });
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error(`Fetch stock data failed for ${selectedStock}:`, response.status, errorText);
+              console.log('Response headers:', [...response.headers]);
+              return;
+            }
+            const data = await response.json();
+            setStockData(data || []);
+          } catch (error) {
+            console.error(`Error fetching stock data for ${selectedStock}:`, error);
+          }
+        };
+        fetchStockData();
+      }, [token, selectedStock]);
+
+      useEffect(() => {
+        if (!token || Object.keys(stocks).length === 0) {
+          console.log('No token or stocks, skipping fetchHeatmapData:', { token, stocks });
+          return;
+        }
+        const fetchHeatmapData = async () => {
+          const stockPrices = {};
+          for (const ticker of Object.keys(stocks)) {
+            try {
+              const authHeader = `Bearer ${token}`;
+              console.log('Fetching heatmap data with config:', {
+                url: `${API_URL}/stocks/${ticker}?minutes=50`,
+                method: 'GET',
+                headers: {
+                  Authorization: authHeader,
+                  'Content-Type': 'application/json'
+                }
+              });
+              const response = await fetch(`${API_URL}/stocks/${ticker}?minutes=50`, {
+                method: 'GET',
+                headers: {
+                  Authorization: authHeader,
+                  'Content-Type': 'application/json'
+                }
+              });
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`Fetch heatmap data failed for ${ticker}:`, response.status, errorText);
+                console.log('Response headers:', [...response.headers]);
+                continue;
+              }
+              const data = await response.json();
+              stockPrices[ticker] = data.map(d => parseFloat(d.price));
+            } catch (error) {
+              console.error(`Error fetching data for ${ticker}:`, error);
+            }
+          }
+
+          const tickers = Object.keys(stockPrices);
+          const correlations = [];
+          for (let i = 0; i < tickers.length; i++) {
+            for (let j = i; j < tickers.length; j++) {
+              const x = stockPrices[tickers[i]];
+              const y = stockPrices[tickers[j]];
+              if (x && y && x.length === y.length) {
+                const corr = calculateCorrelation(x, y);
+                correlations.push({ x: tickers[i], y: tickers[j], value: corr });
+                if (i !== j) {
+                  correlations.push({ x: tickers[j], y: tickers[i], value: corr });
+                }
+              }
+            }
+          }
+          setHeatmapData(correlations);
+        };
+        fetchHeatmapData();
+      }, [token, stocks]);
+
+      const calculateCorrelation = (x, y) => {
+        const n = x.length;
+        const meanX = x.reduce((a, b) => a + b, 0) / n;
+        const meanY = y.reduce((a, b) => a + b, 0) / n;
+
+        let cov = 0, stdX = 0, stdY = 0;
+        for (let i = 0; i < n; i++) {
+          const dx = x[i] - meanX;
+          const dy = y[i] - meanY;
+          cov += dx * dy;
+          stdX += dx * dx;
+          stdY += dy * dy;
+        }
+        cov /= (n - 1);
+        stdX = Math.sqrt(stdX / (n - 1));
+        stdY = Math.sqrt(stdY / (n - 1));
+        return stdX * stdY === 0 ? 0 : cov / (stdX * stdY);
+      };
+
+      return (
+        <div className="container mx-auto p-4">
+          <nav className="flex justify-between items-center mb-4">
+            <h1 className="text-2xl font-bold">Stock Price Aggregator</h1>
+            <div>
+              <button
+                onClick={() => setCurrentPage('stock')}
+                className={`px-4 py-2 mr-2 rounded ${currentPage === 'stock' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              >
+                Stock Page
+              </button>
+              <button
+                onClick={() => setCurrentPage('heatmap')}
+                className={`px-4 py-2 rounded ${currentPage === 'heatmap' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              >
+                Correlation Heatmap
+              </button>
+            </div>
+          </nav>
+
+          {currentPage === 'stock' && (
+            <StockPage
+              stocks={stocks}
+              selectedStock={selectedStock}
+              setSelectedStock={setSelectedStock}
+              stockData={stockData}
+            />
+          )}
+
+          {currentPage === 'heatmap' && (
+            <HeatmapPage
+              stocks={stocks}
+              heatmapData={heatmapData}
+            />
+          )}
+        </div>
+      );
+    };
+
+    const StockPage = ({ stocks, selectedStock, setSelectedStock, stockData }) => {
+      const canvasRef = React.useRef(null);
+
+      useEffect(() => {
+        if (!stockData.length) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.beginPath();
+
+        const prices = stockData.map(d => parseFloat(d.price));
+        const maxPrice = Math.max(...prices);
+        const minPrice = Math.min(...prices);
+        const priceRange = maxPrice - minPrice || 1;
+
+        const step = width / (stockData.length - 1);
+        ctx.strokeStyle = 'blue';
+        ctx.lineWidth = 2;
+
+        stockData.forEach((data, i) => {
+          const x = i * step;
+          const y = height - ((parseFloat(data.price) - minPrice) / priceRange) * (height - 20) - 10;
+          if (i === 0) {
+            ctx.moveTo(x, y);
+          } else {
+            ctx.lineTo(x, y);
+          }
+        });
+        ctx.stroke();
+
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, height - 10);
+        ctx.lineTo(width, height - 10);
+        ctx.moveTo(0, height - 10);
+        ctx.lineTo(0, 0);
+        ctx.stroke();
+
+        ctx.font = '12px Arial';
+        ctx.fillStyle = 'black';
+        ctx.fillText(`Min: ${minPrice.toFixed(2)}`, 10, height - 20);
+        ctx.fillText(`Max: ${maxPrice.toFixed(2)}`, 10, 20);
+      }, [stockData]);
+
+      return (
+        <div>
+          <h2 className="text-xl font-semibold mb-2">Stock Price Chart</h2>
+          <select
+            value={selectedStock || ''}
+            onChange={(e) => setSelectedStock(e.target.value)}
+            className="mb-4 p-2 border rounded"
+            disabled={Object.keys(stocks).length === 0}
+          >
+            {Object.keys(stocks).length > 0 ? (
+              Object.keys(stocks).map(ticker => (
+                <option key={ticker} value={ticker}>
+                  {stocks[ticker]} ({ticker})
+                </option>
+              ))
+            ) : (
+              <option value="">No stocks available</option>
+            )}
+          </select>
+          {stockData.length > 0 && selectedStock && stocks[selectedStock] ? (
+            <div>
+              <canvas ref={canvasRef} width="600" height="400" className="border"></canvas>
+              <p className="mt-2">Showing last 50 minutes of {stocks[selectedStock]}</p>
+            </div>
+          ) : (
+            <p>{Object.keys(stocks).length === 0 ? 'No stocks available' : 'Loading stock data...'}</p>
+          )}
+        </div>
+      );
+    };
+
+    const HeatmapPage = ({ stocks, heatmapData }) => {
+      const canvasRef = React.useRef(null);
+
+      useEffect(() => {
+        if (!heatmapData.length) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const tickers = Object.keys(stocks);
+        const size = 400;
+        const cellSize = size / tickers.length;
+
+        ctx.clearRect(0, 0, size, size);
+
+        heatmapData.forEach(data => {
+          const i = tickers.indexOf(data.x);
+          const j = tickers.indexOf(data.y);
+          if (i === -1 || j === -1) return;
+
+          const val = (data.value + 1) / 2;
+          const red = Math.round(255 * (1 - val));
+          const green = Math.round(255 * val);
+          ctx.fillStyle = `rgb(${red},${green},0)`;
+          ctx.fillRect(i * cellSize, j * cellSize, cellSize, cellSize);
+
+          ctx.fillStyle = 'black';
+          ctx.font = '10px Arial';
+          ctx.fillText(data.value.toFixed(2), i * cellSize + 5, j * cellSize + 15);
+        });
+
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= tickers.length; i++) {
+          ctx.beginPath();
+          ctx.moveTo(i * cellSize, 0);
+          ctx.lineTo(i * cellSize, size);
+          ctx.moveTo(0, i * cellSize);
+          ctx.lineTo(size, i * cellSize);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = 'black';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i < tickers.length; i++) {
+          ctx.fillText(tickers[i], i * cellSize + cellSize / 2, size + 10);
+          ctx.fillText(tickers[i], size + 20, i * cellSize + cellSize / 2);
+        }
+      }, [heatmapData, stocks]);
+
+      return (
+        <div>
+          <h2 className="text-xl font-semibold mb-2">Correlation Heatmap</h2>
+          {heatmapData.length > 0 && Object.keys(stocks).length > 0 ? (
+            <>
+              <canvas ref={canvasRef} width="450" height="450" className="border" />
+              <p className="mt-2">Correlation coefficients between stock price movements</p>
+            </>
+          ) : (
+            <p>No correlation data available</p>
+          )}
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
